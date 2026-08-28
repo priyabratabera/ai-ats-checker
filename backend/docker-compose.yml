@@ -1,0 +1,37 @@
+services:
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ats_checker
+      POSTGRES_USER: ats_checker
+      POSTGRES_PASSWORD: ats_checker
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ats_checker"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      # Overrides .env to point at the compose network's postgres service.
+      DATABASE_URL: postgresql+asyncpg://ats_checker:ats_checker@postgres:5432/ats_checker
+      # If Ollama runs on the host machine (not in this compose file), use
+      # host.docker.internal instead of localhost from inside the container.
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+    ports:
+      - "8000:8000"
+
+volumes:
+  postgres_data:
