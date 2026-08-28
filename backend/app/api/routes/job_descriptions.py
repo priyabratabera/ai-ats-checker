@@ -3,7 +3,7 @@ from uuid import UUID
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
-from app.api.deps import DbSession
+from app.api.deps import DbSession, ensure_user_exists
 from app.core.text_utils import count_words
 from app.models import JobDescription
 from app.schemas.analysis import JobDescriptionOut
@@ -18,12 +18,15 @@ MAX_JD_LENGTH = 20000
 class CreateJobDescriptionRequest(BaseModel):
     raw_text: str = Field(min_length=MIN_JD_LENGTH, max_length=MAX_JD_LENGTH)
     title: str | None = None
+    user_id: UUID | None = None
 
 
 @router.post("", response_model=JobDescriptionOut, status_code=201)
 async def create_job_description(body: CreateJobDescriptionRequest, db: DbSession) -> JobDescription:
+    await ensure_user_exists(body.user_id, db)
     text = body.raw_text.strip()
     jd = JobDescription(
+        user_id=body.user_id,
         title=body.title,
         raw_text=text,
         word_count=count_words(text),

@@ -85,18 +85,23 @@ ATS score - different real ATS products score differently.
 
 PostgreSQL via SQLAlchemy 2.0 (async, `asyncpg`) + Alembic migrations.
 Five tables: `users`, `resumes`, `job_descriptions`, `analysis_results`,
-`recommendations`. **No authentication is implemented yet** - every table
-carries a nullable `user_id` so the app runs single-tenant today and can be
-scoped to real accounts later without a schema change. ChromaDB/vector
-storage is intentionally not used for this first version.
+`recommendations`. **This is identification, not authentication** - the
+frontend collects a name + email before analysis and `POST /api/v1/users`
+get-or-creates a row by email (anyone can claim any email; there's no
+password or session), and `resume_id`/`job_description_id`/`analysis_id`
+requests all carry an optional `user_id` that's resolved from that row.
+Every `user_id` column stays nullable, so anonymous use still works (e.g.
+when the frontend's local fallback engine runs instead of this backend).
+ChromaDB/vector storage is intentionally not used for this first version.
 
 ## API
 
 | Method | Path | Purpose |
 |---|---|---|
-| `POST` | `/api/v1/resumes` | Upload + parse a PDF/DOCX/TXT resume, persist it |
+| `POST` | `/api/v1/users` | Get-or-create a user by email (identification, not auth) |
+| `POST` | `/api/v1/resumes` | Upload + parse a PDF/DOCX/TXT resume, persist it (optional `user_id`) |
 | `GET` | `/api/v1/resumes/{id}` | Fetch a stored resume |
-| `POST` | `/api/v1/job-descriptions` | Submit JD text, persist extracted requirements |
+| `POST` | `/api/v1/job-descriptions` | Submit JD text, persist extracted requirements (optional `user_id`) |
 | `GET` | `/api/v1/job-descriptions/{id}` | Fetch a stored job description |
 | `POST` | `/api/v1/analyze` | Run both engines against a resume + JD, persist + return the full result |
 | `GET` | `/api/v1/analyses/{id}` | Fetch a stored analysis result + recommendations |

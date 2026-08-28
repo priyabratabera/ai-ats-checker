@@ -32,8 +32,11 @@ result depends on whether the backend is reachable:
 1. **Backend path (default when `backend/` is running).** The route calls a
    fast health check (`lib/api/backend-client.ts::isBackendReachable`, ~2.5s
    timeout) *before* streaming anything - if the backend answers, the route
-   proxies to it: `POST /api/v1/resumes` -> `POST /api/v1/job-descriptions`
-   -> `POST /api/v1/analyze` (`lib/analysis/backend-pipeline.ts`). The
+   proxies to it: `POST /api/v1/users` (get-or-create by the name + email
+   collected in step 1 of the form, best-effort - failure here degrades to
+   an anonymous save rather than failing the analysis) -> `POST
+   /api/v1/resumes` -> `POST /api/v1/job-descriptions` -> `POST
+   /api/v1/analyze` (`lib/analysis/backend-pipeline.ts`). The
    backend's response (PyMuPDF-based rule engine + Ollama/OpenAI/Claude
    semantic engine, Postgres-persisted) is adapted into this app's
    `AnalysisResult` shape by `lib/analysis/backend-adapter.ts`. The backend

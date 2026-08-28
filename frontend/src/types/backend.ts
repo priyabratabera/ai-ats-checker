@@ -5,6 +5,13 @@
  * works against the engine-agnostic types in types/analysis.ts.
  */
 
+export interface BackendUser {
+  id: string;
+  name: string | null;
+  email: string | null;
+  created_at: string;
+}
+
 export interface BackendContactInfo {
   has_email: boolean;
   has_phone: boolean;

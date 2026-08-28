@@ -4,6 +4,7 @@ import { progressEvent } from "./progress-event";
 import { adaptBackendResult } from "./backend-adapter";
 import {
   createJobDescriptionOnBackend,
+  identifyUserOnBackend,
   runBackendAnalysis,
   uploadResumeToBackend,
 } from "@/lib/api/backend-client";
@@ -13,21 +14,24 @@ export interface BackendPipelineInput {
   resumeText: string;
   fileKind: FileKind;
   jdText: string;
+  name: string;
+  email: string;
 }
 
 /**
- * Orchestrates the backend's 3-step API (create resume -> create job
- * description -> analyze) behind the same streamed-progress shape the local
- * fallback engine produces, so the UI doesn't need to know which engine
- * ran. The backend computes everything atomically in /analyze, so the
- * later "stages" here are emitted as a fast sequence right after that call
- * resolves rather than genuinely streamed - still an honest signal, since
- * that's really where the time is spent (the AI call can take 10-20s+).
+ * Orchestrates the backend's API (identify user -> create resume -> create
+ * job description -> analyze) behind the same streamed-progress shape the
+ * local fallback engine produces, so the UI doesn't need to know which
+ * engine ran. The backend computes everything atomically in /analyze, so
+ * the later "stages" here are emitted as a fast sequence right after that
+ * call resolves rather than genuinely streamed - still an honest signal,
+ * since that's really where the time is spent (the AI call can take
+ * 10-20s+).
  */
 export async function* runBackendAnalysisPipeline(
   input: BackendPipelineInput,
 ): AsyncGenerator<AnalysisStreamEvent> {
-  const { resumeFile, resumeText, fileKind, jdText } = input;
+  const { resumeFile, resumeText, fileKind, jdText, name, email } = input;
 
   yield progressEvent(
     "parsing",
@@ -36,10 +40,21 @@ export async function* runBackendAnalysisPipeline(
     8,
   );
 
+  // Best-effort: identifying the visitor (name/email -> a users row) is not
+  // essential to producing an analysis, so a failure here degrades to an
+  // anonymous save rather than failing the whole request.
+  let userId: string | undefined;
+  try {
+    const user = await identifyUserOnBackend(name, email);
+    userId = user.id;
+  } catch (err) {
+    console.error("Backend user identification failed - continuing anonymously:", err);
+  }
+
   yield progressEvent("keywords", "start", "Sending resume and job description to the backend...", 12);
   const [backendResume, backendJd] = await Promise.all([
-    uploadResumeToBackend(resumeFile),
-    createJobDescriptionOnBackend(jdText),
+    uploadResumeToBackend(resumeFile, userId),
+    createJobDescriptionOnBackend(jdText, userId),
   ]);
   yield progressEvent(
     "keywords",

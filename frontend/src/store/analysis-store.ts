@@ -1,10 +1,13 @@
 import { create } from "zustand";
 import type { AnalysisProgressEvent, AnalysisResult } from "@/types/analysis";
 import { AnalysisRequestError, streamAnalysis } from "@/lib/api/stream-analysis";
+import { emailSchema, nameSchema } from "@/lib/validation/upload";
 
 export type AnalysisStatus = "idle" | "analyzing" | "done" | "error";
 
 interface AnalysisState {
+  name: string;
+  email: string;
   resumeFile: File | null;
   jobDescription: string;
   status: AnalysisStatus;
@@ -12,6 +15,8 @@ interface AnalysisState {
   result: AnalysisResult | null;
   error: string | null;
 
+  setName: (name: string) => void;
+  setEmail: (email: string) => void;
   setResumeFile: (file: File | null) => void;
   setJobDescription: (text: string) => void;
   startAnalysis: () => Promise<void>;
@@ -19,6 +24,8 @@ interface AnalysisState {
 }
 
 export const useAnalysisStore = create<AnalysisState>((set, get) => ({
+  name: "",
+  email: "",
   resumeFile: null,
   jobDescription: "",
   status: "idle",
@@ -26,17 +33,20 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => ({
   result: null,
   error: null,
 
+  setName: (name) => set({ name }),
+  setEmail: (email) => set({ email }),
   setResumeFile: (file) => set({ resumeFile: file }),
   setJobDescription: (text) => set({ jobDescription: text }),
 
   startAnalysis: async () => {
-    const { resumeFile, jobDescription } = get();
+    const { name, email, resumeFile, jobDescription } = get();
     if (!resumeFile || !jobDescription.trim()) return;
+    if (!nameSchema.safeParse(name).success || !emailSchema.safeParse(email).success) return;
 
     set({ status: "analyzing", progressEvents: [], result: null, error: null });
 
     try {
-      for await (const event of streamAnalysis({ resumeFile, jobDescription })) {
+      for await (const event of streamAnalysis({ resumeFile, jobDescription, name, email })) {
         if (event.type === "progress") {
           set((state) => ({ progressEvents: [...state.progressEvents, event.data] }));
         } else if (event.type === "result") {
@@ -53,6 +63,8 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => ({
     }
   },
 
+  // Name/email deliberately survive a reset - a returning visitor
+  // shouldn't have to retype their details to analyze another resume.
   reset: () =>
     set({
       resumeFile: null,

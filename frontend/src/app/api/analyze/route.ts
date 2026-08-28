@@ -9,7 +9,9 @@ import {
 } from "@/lib/parsing/extract-text";
 import {
   MAX_RESUME_SIZE_BYTES,
+  emailSchema,
   jobDescriptionSchema,
+  nameSchema,
 } from "@/lib/validation/upload";
 
 export const runtime = "nodejs";
@@ -29,10 +31,24 @@ export async function POST(request: Request) {
 
   const file = formData.get("resume");
   const jdRaw = formData.get("jobDescription");
+  const nameRaw = formData.get("name");
+  const emailRaw = formData.get("email");
 
   if (!(file instanceof File)) {
     return jsonError("Missing resume file.", 400);
   }
+
+  const nameParse = nameSchema.safeParse(typeof nameRaw === "string" ? nameRaw : "");
+  if (!nameParse.success) {
+    return jsonError(nameParse.error.issues[0]?.message ?? "Invalid name.", 400);
+  }
+  const name = nameParse.data;
+
+  const emailParse = emailSchema.safeParse(typeof emailRaw === "string" ? emailRaw : "");
+  if (!emailParse.success) {
+    return jsonError(emailParse.error.issues[0]?.message ?? "Invalid email.", 400);
+  }
+  const email = emailParse.data;
   if (file.size === 0) {
     return jsonError("The uploaded resume file is empty.", 400);
   }
@@ -76,7 +92,7 @@ export async function POST(request: Request) {
       };
       try {
         const pipeline = useBackend
-          ? runBackendAnalysisPipeline({ resumeFile: file, resumeText, fileKind, jdText })
+          ? runBackendAnalysisPipeline({ resumeFile: file, resumeText, fileKind, jdText, name, email })
           : runAnalysisPipeline({
               resumeText,
               fileName: file.name,

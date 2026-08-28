@@ -10,11 +10,15 @@ export class AnalysisRequestError extends Error {}
 export async function* streamAnalysis(params: {
   resumeFile: File;
   jobDescription: string;
+  name: string;
+  email: string;
   signal?: AbortSignal;
 }): AsyncGenerator<AnalysisStreamEvent> {
   const formData = new FormData();
   formData.set("resume", params.resumeFile);
   formData.set("jobDescription", params.jobDescription);
+  formData.set("name", params.name);
+  formData.set("email", params.email);
 
   const response = await fetch("/api/analyze", {
     method: "POST",

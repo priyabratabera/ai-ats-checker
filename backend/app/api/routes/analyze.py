@@ -64,6 +64,7 @@ async def analyze(body: AnalyzeRequest, db: DbSession, settings: AppSettings) ->
     )
 
     analysis_result = AnalysisResult(
+        user_id=resume.user_id,
         resume_id=resume.id,
         job_description_id=job_description.id,
         overall_score=pipeline_result.score.overall,

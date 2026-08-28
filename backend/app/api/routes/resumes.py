@@ -1,8 +1,8 @@
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, UploadFile
+from fastapi import APIRouter, Form, HTTPException, UploadFile
 
-from app.api.deps import AppSettings, DbSession
+from app.api.deps import AppSettings, DbSession, ensure_user_exists
 from app.models import FileKind, Resume
 from app.schemas.analysis import ResumeOut
 from app.services.resume_parser import (
@@ -15,7 +15,13 @@ router = APIRouter(prefix="/api/v1/resumes", tags=["resumes"])
 
 
 @router.post("", response_model=ResumeOut, status_code=201)
-async def upload_resume(file: UploadFile, db: DbSession, settings: AppSettings) -> Resume:
+async def upload_resume(
+    file: UploadFile,
+    db: DbSession,
+    settings: AppSettings,
+    user_id: UUID | None = Form(default=None),  # noqa: B008 - FastAPI's own injection pattern
+) -> Resume:
+    await ensure_user_exists(user_id, db)
     buffer = await file.read()
 
     if len(buffer) == 0:
@@ -32,6 +38,7 @@ async def upload_resume(file: UploadFile, db: DbSession, settings: AppSettings) 
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     resume = Resume(
+        user_id=user_id,
         file_name=file.filename or "resume",
         file_kind=FileKind(parsed.file_kind),
         file_size_bytes=len(buffer),

@@ -6,14 +6,17 @@ from app.db.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
 
 class User(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     """
-    Minimal placeholder for future auth. No authentication is implemented
-    yet - resumes/job_descriptions/analysis_results all carry a nullable
-    user_id so the app runs single-tenant today and can be scoped to real
-    accounts later without a schema change.
+    Lightweight identification, not authentication - visitors self-report a
+    name + email before checking their ATS score (see POST /api/v1/users),
+    identified by email (get-or-create). No login, password, or session -
+    resumes/job_descriptions/analysis_results carry a nullable user_id so
+    anonymous use still works if the frontend's local fallback engine runs
+    instead of this backend.
     """
 
     __tablename__ = "users"
 
+    name: Mapped[str | None] = mapped_column(String(200), nullable=True)
     email: Mapped[str | None] = mapped_column(String(320), unique=True, nullable=True)
 
     resumes: Mapped[list["Resume"]] = relationship(back_populates="user")  # noqa: F821

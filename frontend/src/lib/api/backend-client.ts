@@ -3,6 +3,7 @@ import type {
   BackendErrorBody,
   BackendJobDescription,
   BackendResume,
+  BackendUser,
 } from "@/types/backend";
 
 export class BackendUnavailableError extends Error {
@@ -65,9 +66,31 @@ export async function isBackendReachable(): Promise<boolean> {
   }
 }
 
-export async function uploadResumeToBackend(file: File): Promise<BackendResume> {
+/**
+ * Get-or-create by email - not authentication, just enough to attribute a
+ * resume/analysis to a name + email in the `users` table (see the backend's
+ * POST /api/v1/users).
+ */
+export async function identifyUserOnBackend(name: string, email: string): Promise<BackendUser> {
+  const response = await backendFetch(
+    "/api/v1/users",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, email }),
+    },
+    10_000,
+  );
+  if (!response.ok) {
+    throw new BackendRequestError(await parseErrorDetail(response), response.status);
+  }
+  return (await response.json()) as BackendUser;
+}
+
+export async function uploadResumeToBackend(file: File, userId?: string): Promise<BackendResume> {
   const formData = new FormData();
   formData.set("file", file);
+  if (userId) formData.set("user_id", userId);
 
   const response = await backendFetch("/api/v1/resumes", { method: "POST", body: formData }, 15_000);
   if (!response.ok) {
@@ -78,13 +101,14 @@ export async function uploadResumeToBackend(file: File): Promise<BackendResume> 
 
 export async function createJobDescriptionOnBackend(
   rawText: string,
+  userId?: string,
 ): Promise<BackendJobDescription> {
   const response = await backendFetch(
     "/api/v1/job-descriptions",
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ raw_text: rawText }),
+      body: JSON.stringify({ raw_text: rawText, user_id: userId }),
     },
     15_000,
   );

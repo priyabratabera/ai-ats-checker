@@ -12,6 +12,21 @@ export const MAX_RESUME_SIZE_BYTES = 5 * 1024 * 1024;
 export const MIN_JD_LENGTH = 40;
 export const MAX_JD_LENGTH = 20000;
 
+export const MIN_NAME_LENGTH = 1;
+export const MAX_NAME_LENGTH = 200;
+
+export const nameSchema = z
+  .string()
+  .trim()
+  .min(MIN_NAME_LENGTH, "Name is required.")
+  .max(MAX_NAME_LENGTH, `Name must be under ${MAX_NAME_LENGTH} characters.`);
+
+export const emailSchema = z
+  .string()
+  .trim()
+  .min(1, "Email is required.")
+  .email("Enter a valid email address.");
+
 export const jobDescriptionSchema = z
   .string()
   .trim()
