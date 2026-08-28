@@ -12,6 +12,17 @@ export interface BackendUser {
   created_at: string;
 }
 
+/** One row per completed ATS check (not one row per unique user) - see
+ * GET /api/v1/analyses. */
+export interface BackendAnalysisListItem {
+  id: string;
+  name: string | null;
+  email: string | null;
+  resume_file_name: string;
+  overall_score: number;
+  created_at: string;
+}
+
 export interface BackendContactInfo {
   has_email: boolean;
   has_phone: boolean;

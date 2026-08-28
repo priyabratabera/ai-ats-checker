@@ -1,12 +1,18 @@
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException
+from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
 from app.api.deps import AppSettings, DbSession
 from app.models import AnalysisResult, JobDescription, Recommendation, Resume
 from app.models.recommendation import RecommendationPriority, RecommendationSource
-from app.schemas.analysis import AnalysisResultOut, AnalyzeRequest, RecommendationOut
+from app.schemas.analysis import (
+    AnalysisListItemOut,
+    AnalysisResultOut,
+    AnalyzeRequest,
+    RecommendationOut,
+)
 from app.schemas.parsing import LayoutFindings
 from app.services.analysis_pipeline import run_analysis
 
@@ -92,6 +98,32 @@ async def analyze(body: AnalyzeRequest, db: DbSession, settings: AppSettings) ->
     await db.refresh(analysis_result, attribute_names=["recommendations"])
 
     return _to_result_out(analysis_result)
+
+
+@router.get("/analyses", response_model=list[AnalysisListItemOut])
+async def list_analyses(db: DbSession, limit: int = 500) -> list[AnalysisListItemOut]:
+    """
+    Read-only listing, one row per completed ATS check (not one row per
+    unique user) - the same person checking multiple resumes appears once
+    per check, most recent first. Powers the frontend's /users page.
+    """
+    results = await db.scalars(
+        select(AnalysisResult)
+        .options(selectinload(AnalysisResult.user), selectinload(AnalysisResult.resume))
+        .order_by(AnalysisResult.created_at.desc())
+        .limit(limit)
+    )
+    return [
+        AnalysisListItemOut(
+            id=r.id,
+            name=r.user.name if r.user else None,
+            email=r.user.email if r.user else None,
+            resume_file_name=r.resume.file_name,
+            overall_score=r.overall_score,
+            created_at=r.created_at,
+        )
+        for r in results
+    ]
 
 
 @router.get("/analyses/{analysis_id}", response_model=AnalysisResultOut)

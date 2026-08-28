@@ -1,4 +1,5 @@
 import type {
+  BackendAnalysisListItem,
   BackendAnalysisResult,
   BackendErrorBody,
   BackendJobDescription,
@@ -87,13 +88,25 @@ export async function identifyUserOnBackend(name: string, email: string): Promis
   return (await response.json()) as BackendUser;
 }
 
-/** Read-only listing (name, email, created_at) for the /users page - no filtering/editing. */
+/** Read-only listing of distinct identified users (one row per email), most recent first. */
 export async function listUsersFromBackend(): Promise<BackendUser[]> {
   const response = await backendFetch("/api/v1/users", { method: "GET", cache: "no-store" }, 10_000);
   if (!response.ok) {
     throw new BackendRequestError(await parseErrorDetail(response), response.status);
   }
   return (await response.json()) as BackendUser[];
+}
+
+/**
+ * Read-only listing for the /users page - one row per completed ATS check
+ * (not one row per unique user), most recent first. No filtering/editing.
+ */
+export async function listAnalysesFromBackend(): Promise<BackendAnalysisListItem[]> {
+  const response = await backendFetch("/api/v1/analyses", { method: "GET", cache: "no-store" }, 10_000);
+  if (!response.ok) {
+    throw new BackendRequestError(await parseErrorDetail(response), response.status);
+  }
+  return (await response.json()) as BackendAnalysisListItem[];
 }
 
 export async function uploadResumeToBackend(file: File, userId?: string): Promise<BackendResume> {

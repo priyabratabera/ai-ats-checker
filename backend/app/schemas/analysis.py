@@ -92,3 +92,16 @@ class AnalysisResultOut(BaseModel):
     ai_model: str | None
     recommendations: list[RecommendationOut]
     created_at: datetime
+
+
+class AnalysisListItemOut(BaseModel):
+    """One row per completed ATS check (not one row per unique user) - the
+    same person checking 3 resumes shows up as 3 rows, each with its own
+    timestamp. See GET /api/v1/analyses."""
+
+    id: UUID
+    name: str | None
+    email: str | None
+    resume_file_name: str
+    overall_score: int
+    created_at: datetime

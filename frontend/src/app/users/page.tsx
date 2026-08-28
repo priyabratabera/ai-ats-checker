@@ -3,8 +3,13 @@ import { ArrowLeft, Users as UsersIcon } from "lucide-react";
 import { SiteHeader } from "@/components/layout/site-header";
 import { SiteFooter } from "@/components/layout/site-footer";
 import { Card } from "@/components/ui/card";
-import { listUsersFromBackend, BackendRequestError, BackendUnavailableError } from "@/lib/api/backend-client";
-import type { BackendUser } from "@/types/backend";
+import { scoreBand, SCORE_BAND_COLORS } from "@/components/dashboard/score-band";
+import {
+  listAnalysesFromBackend,
+  BackendRequestError,
+  BackendUnavailableError,
+} from "@/lib/api/backend-client";
+import type { BackendAnalysisListItem } from "@/types/backend";
 
 export const dynamic = "force-dynamic";
 
@@ -13,9 +18,9 @@ const dateFormatter = new Intl.DateTimeFormat("en-US", {
   timeStyle: "short",
 });
 
-async function loadUsers(): Promise<{ users: BackendUser[] } | { error: string }> {
+async function loadChecks(): Promise<{ checks: BackendAnalysisListItem[] } | { error: string }> {
   try {
-    return { users: await listUsersFromBackend() };
+    return { checks: await listAnalysesFromBackend() };
   } catch (err) {
     if (err instanceof BackendUnavailableError) {
       return { error: "Could not reach the backend. Start it (see backend/README.md) and reload this page." };
@@ -28,13 +33,13 @@ async function loadUsers(): Promise<{ users: BackendUser[] } | { error: string }
 }
 
 export default async function UsersPage() {
-  const result = await loadUsers();
+  const result = await loadChecks();
 
   return (
     <>
       <SiteHeader />
       <main className="flex-1">
-        <div className="mx-auto max-w-3xl px-4 py-10 sm:px-6 sm:py-14">
+        <div className="mx-auto max-w-4xl px-4 py-10 sm:px-6 sm:py-14">
           <Link
             href="/"
             className="mb-6 inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100"
@@ -50,7 +55,7 @@ export default async function UsersPage() {
             <div>
               <h1 className="text-2xl font-semibold text-slate-900 dark:text-slate-50">Visitors</h1>
               <p className="text-sm text-slate-500 dark:text-slate-400">
-                Everyone who has checked their ATS score, from the backend&apos;s <code>users</code> table.
+                Every ATS check performed, most recent first - a returning visitor appears once per check.
               </p>
             </div>
           </div>
@@ -59,13 +64,13 @@ export default async function UsersPage() {
             <Card className="p-6 text-sm text-red-600 dark:text-red-400">{result.error}</Card>
           )}
 
-          {"users" in result && result.users.length === 0 && (
+          {"checks" in result && result.checks.length === 0 && (
             <Card className="p-6 text-sm text-slate-500 dark:text-slate-400">
-              No visitors yet - once someone checks their ATS score via the backend, they&apos;ll show up here.
+              No checks yet - once someone checks their ATS score via the backend, they&apos;ll show up here.
             </Card>
           )}
 
-          {"users" in result && result.users.length > 0 && (
+          {"checks" in result && result.checks.length > 0 && (
             <Card className="overflow-hidden">
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
@@ -73,20 +78,33 @@ export default async function UsersPage() {
                     <tr className="border-b border-slate-200 text-left text-xs font-medium text-slate-500 dark:border-slate-800 dark:text-slate-400">
                       <th className="px-6 py-3">Name</th>
                       <th className="px-6 py-3">Email</th>
+                      <th className="px-6 py-3">Resume</th>
+                      <th className="px-6 py-3">Score</th>
                       <th className="px-6 py-3">Date</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                    {result.users.map((user) => (
-                      <tr key={user.id}>
+                    {result.checks.map((check) => (
+                      <tr key={check.id}>
                         <td className="px-6 py-3 font-medium text-slate-900 dark:text-slate-100">
-                          {user.name || <span className="text-slate-400 dark:text-slate-600">-</span>}
+                          {check.name || <span className="text-slate-400 dark:text-slate-600">-</span>}
                         </td>
                         <td className="px-6 py-3 text-slate-600 dark:text-slate-400">
-                          {user.email || <span className="text-slate-400 dark:text-slate-600">-</span>}
+                          {check.email || <span className="text-slate-400 dark:text-slate-600">-</span>}
+                        </td>
+                        <td className="max-w-[220px] truncate px-6 py-3 text-slate-600 dark:text-slate-400">
+                          {check.resume_file_name}
+                        </td>
+                        <td className="px-6 py-3">
+                          <span
+                            className="font-semibold tabular-nums"
+                            style={{ color: SCORE_BAND_COLORS[scoreBand(check.overall_score)] }}
+                          >
+                            {check.overall_score}
+                          </span>
                         </td>
                         <td className="px-6 py-3 whitespace-nowrap text-slate-500 dark:text-slate-400">
-                          {dateFormatter.format(new Date(user.created_at))}
+                          {dateFormatter.format(new Date(check.created_at))}
                         </td>
                       </tr>
                     ))}
