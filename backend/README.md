@@ -4,6 +4,11 @@ FastAPI + PostgreSQL backend implementing two independent analysis engines,
 combined by a scoring engine - the design goal being that the LLM never
 calculates anything a deterministic check can verify.
 
+The [frontend](../frontend/README.md) proxies to this service when it's
+reachable and falls back to its own local engine otherwise - see
+[../README.md](../README.md) for the full picture. This backend has no
+knowledge of the frontend; it's a standalone API consumable by anything.
+
 ```
                  Resume
                     |
@@ -101,11 +106,12 @@ Interactive docs at `/docs` once the server is running.
 
 ## Not yet built (see the phased plan)
 
-- PDF-coordinate-based inline highlighting on the frontend (Engine 1 already
-  captures table/image/column positions via PyMuPDF's word/block
-  coordinates in `resume_parser.py`; wiring that through to the frontend's
-  highlight UI is future work - today's frontend does its own client-side
-  text-search highlighting against the plain extracted text)
+- PDF-coordinate-based inline highlighting (Engine 1 already captures
+  table/image/column positions via PyMuPDF's word/block coordinates in
+  `resume_parser.py`, but nothing in the API surfaces them yet - the
+  frontend's highlighting today is text-search-based, computed on its own
+  side from this backend's `keyword_analysis` rather than from these real
+  positions)
 - Authentication
 - Production deployment (containerized here via `Dockerfile`/`docker-compose.yml`,
   but not deployed)

@@ -5,6 +5,10 @@ Tracking System) resume checker: upload a resume and a job description and get
 a rule-based + semantic ATS score, keyword-level highlighting on the resume
 itself, and prioritized, actionable recommendations.
 
+This app is wired to the [FastAPI backend](../backend/README.md) - see
+[../README.md](../README.md) for how the two pieces fit together. It also
+works entirely on its own if the backend isn't running (see below).
+
 ## Stack
 
 - **Next.js 16** (App Router, Turbopack, TypeScript, Node.js runtime)
@@ -20,39 +24,33 @@ itself, and prioritized, actionable recommendations.
 
 ## How analysis works
 
-There is no separate backend yet - the full analysis pipeline lives in this
-app under `POST /api/analyze` (`src/app/api/analyze/route.ts`), which streams
+`POST /api/analyze` (`src/app/api/analyze/route.ts`) streams
 newline-delimited JSON progress events followed by a final result, so the UI
-can show real progress instead of a fake timer.
+shows real progress instead of a fake timer. What actually produces that
+result depends on whether the backend is reachable:
 
-The pipeline (`src/lib/analysis/`) is self-contained and requires no external
-API key:
+1. **Backend path (default when `backend/` is running).** The route calls a
+   fast health check (`lib/api/backend-client.ts::isBackendReachable`, ~2.5s
+   timeout) *before* streaming anything - if the backend answers, the route
+   proxies to it: `POST /api/v1/resumes` -> `POST /api/v1/job-descriptions`
+   -> `POST /api/v1/analyze` (`lib/analysis/backend-pipeline.ts`). The
+   backend's response (PyMuPDF-based rule engine + Ollama/OpenAI/Claude
+   semantic engine, Postgres-persisted) is adapted into this app's
+   `AnalysisResult` shape by `lib/analysis/backend-adapter.ts`. The backend
+   has no resume-text-position API, so inline highlighting is rebuilt here
+   from the extracted resume text plus the backend's real keyword analysis,
+   reusing the local engine's own highlighting logic for that one purpose.
+2. **Local fallback path (when the backend is unreachable).** The route runs
+   this app's own self-contained TypeScript pipeline (`lib/analysis/`)
+   instead - full PDF/DOCX/TXT extraction, rule-based keyword matching
+   against a curated synonym taxonomy, TF-IDF/cosine "semantic" scoring,
+   formatting/structure checks, weighted scoring, and an optional
+   `ANTHROPIC_API_KEY`-powered semantic summary (heuristic otherwise). No
+   external dependency required at all.
 
-1. **Text extraction** (`lib/parsing`) - PDF (via `unpdf`), DOCX (via
-   `mammoth`), or plain text.
-2. **Keyword extraction & matching** (`keyword-extraction.ts`, `matching.ts`)
-   - rule-based extraction from the job description (weighted by frequency
-     and by "requirements/must-have" cues), matched against the resume with
-     a curated skill/synonym taxonomy (`skill-taxonomy.ts`).
-3. **Semantic analysis** (`semantic-similarity.ts`,
-   `semantic/heuristic-insights.ts`) - a TF-IDF/cosine-similarity comparison
-   between resume and job description text, used for the "Experience Match"
-   score and a template-based gap summary. This works fully offline.
-4. **Optional LLM enhancement** (`semantic/llm-enhancer.ts`) - if
-   `ANTHROPIC_API_KEY` is set, a Claude call replaces the heuristic summary
-   with a richer narrative gap analysis. The app works identically without
-   it; this is a pluggable, best-effort enhancement layer that fails
-   gracefully back to the heuristic.
-5. **Formatting & structure rules** (`formatting-rules.ts`,
-   `structure-rules.ts`) - bullet usage, contact info, quantified
-   achievements, weak/passive phrasing, section headings, date consistency.
-6. **Scoring** (`scoring.ts`) - a weighted 0-100 overall score across five
-   categories: Keyword Match, Skills Match, Experience Match, Formatting,
-   Structure.
-7. **Highlights & recommendations** (`highlights.ts`, `recommendations.ts`) -
-   maps findings onto resume text spans for inline highlighting, and
-   generates prioritized, actionable recommendations (with before/after
-   examples where applicable).
+Every result carries an `engineSource: "backend" | "local-fallback"` field,
+surfaced in the UI as a badge, so it's always clear which engine actually
+produced a given analysis - the app never silently switches mid-request.
 
 ## Getting started
 
@@ -64,7 +62,10 @@ npm install
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000).
+Open [http://localhost:3000](http://localhost:3000). Start the
+[backend](../backend/README.md) first if you want backend-powered analysis
+(Postgres persistence, PyMuPDF layout checks, live LLM semantic analysis) -
+otherwise every request automatically uses the local fallback engine.
 
 ## Environment variables
 
@@ -73,7 +74,8 @@ fully functional with none set.
 
 | Variable | Purpose |
 |---|---|
-| `ANTHROPIC_API_KEY` | Enables the optional Claude-powered semantic gap analysis. Omit to use the built-in heuristic analysis instead. |
+| `BACKEND_API_URL` | Base URL of the FastAPI backend (default `http://localhost:8000`). Used only server-side by the `/api/analyze` route. |
+| `ANTHROPIC_API_KEY` | Used only by the local fallback engine, for richer semantic gap analysis instead of the built-in heuristic. Irrelevant when the backend is handling analysis (the backend has its own separate `ANTHROPIC_API_KEY`). |
 
 ## Scripts
 
@@ -101,11 +103,11 @@ src/
     recommendations/          recommendation list/cards
     app/                      top-level state machine + results composition
   lib/
-    analysis/                 the rule-based + semantic scoring engine
-    parsing/                   PDF/DOCX/TXT text extraction
-    api/                       client-side streaming fetch helper
+    analysis/                 local fallback engine + backend-adapter/backend-pipeline
+    parsing/                   PDF/DOCX/TXT text extraction (used by both paths)
+    api/                       backend-client.ts (typed FastAPI calls) + streaming fetch helper
     validation/                 file/JD input validation (Zod)
     report/                    PDF report generation (jsPDF)
   store/                      Zustand store for the analysis flow
-  types/                      shared TypeScript contracts (AnalysisResult, ...)
+  types/                      analysis.ts (engine-agnostic UI types), backend.ts (FastAPI wire types)
 ```
