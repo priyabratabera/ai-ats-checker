@@ -87,6 +87,15 @@ export async function identifyUserOnBackend(name: string, email: string): Promis
   return (await response.json()) as BackendUser;
 }
 
+/** Read-only listing (name, email, created_at) for the /users page - no filtering/editing. */
+export async function listUsersFromBackend(): Promise<BackendUser[]> {
+  const response = await backendFetch("/api/v1/users", { method: "GET", cache: "no-store" }, 10_000);
+  if (!response.ok) {
+    throw new BackendRequestError(await parseErrorDetail(response), response.status);
+  }
+  return (await response.json()) as BackendUser[];
+}
+
 export async function uploadResumeToBackend(file: File, userId?: string): Promise<BackendResume> {
   const formData = new FormData();
   formData.set("file", file);
