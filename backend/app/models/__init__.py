@@ -6,7 +6,7 @@ this package for that side effect - don't remove an import even if it
 looks unused.
 """
 
-from app.models.analysis_result import AnalysisResult
+from app.models.analysis_result import AnalysisResult, AnalysisStatus
 from app.models.job_description import JobDescription
 from app.models.recommendation import (
     Recommendation,
@@ -18,6 +18,7 @@ from app.models.user import User
 
 __all__ = [
     "AnalysisResult",
+    "AnalysisStatus",
     "FileKind",
     "JobDescription",
     "Recommendation",

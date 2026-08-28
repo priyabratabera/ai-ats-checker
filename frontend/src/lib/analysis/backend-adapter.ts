@@ -6,11 +6,11 @@ import type {
   SemanticInsights,
 } from "@/types/analysis";
 import type {
-  BackendAnalysisResult,
   BackendJobDescription,
   BackendKeywordAnalysis,
   BackendLLMAnalysisResult,
   BackendResume,
+  CompletedBackendAnalysisResult,
 } from "@/types/backend";
 import { runFormattingChecks } from "@/lib/analysis/formatting-rules";
 import { buildHighlights } from "@/lib/analysis/highlights";
@@ -62,7 +62,7 @@ function adaptSemanticInsights(
   };
 }
 
-function adaptRecommendations(result: BackendAnalysisResult): Recommendation[] {
+function adaptRecommendations(result: CompletedBackendAnalysisResult): Recommendation[] {
   return result.recommendations.map((r) => ({
     id: r.id,
     category: r.category,
@@ -86,7 +86,7 @@ function adaptRecommendations(result: BackendAnalysisResult): Recommendation[] {
 export function adaptBackendResult(params: {
   backendResume: BackendResume;
   backendJd: BackendJobDescription;
-  backendResult: BackendAnalysisResult;
+  backendResult: CompletedBackendAnalysisResult;
   resumeText: string;
   fileKind: FileKind;
 }): AnalysisResult {

@@ -17,21 +17,38 @@ services:
       retries: 10
 
   api:
-    build: .
+    build:
+      context: ./backend
     restart: unless-stopped
     depends_on:
       postgres:
         condition: service_healthy
     env_file:
-      - .env
+      - ./backend/.env
     environment:
-      # Overrides .env to point at the compose network's postgres service.
+      # Overrides backend/.env to point at the compose network's postgres service.
       DATABASE_URL: postgresql+asyncpg://ats_checker:ats_checker@postgres:5432/ats_checker
       # If Ollama runs on the host machine (not in this compose file), use
       # host.docker.internal instead of localhost from inside the container.
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
     ports:
       - "8000:8000"
+
+  # Polls Postgres for pending ATS checks and runs the AI-engine call the
+  # api container's /analyze no longer does inline - see worker/README.md.
+  worker:
+    build:
+      context: .
+      dockerfile: worker/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file:
+      - ./worker/.env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://ats_checker:ats_checker@postgres:5432/ats_checker
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
 
 volumes:
   postgres_data:

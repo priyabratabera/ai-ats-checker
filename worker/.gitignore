@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+
+# Virtual environment
+.venv/
+venv/
+
+# Only present locally when running the worker outside Docker (copied from
+# backend/app - see README.md) - never committed.
+app/
+
+# Env files
+.env
+.env.*
+!.env.example
+
+# OS
+.DS_Store

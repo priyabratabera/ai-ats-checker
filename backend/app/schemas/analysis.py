@@ -85,12 +85,17 @@ class AnalysisResultOut(BaseModel):
     id: UUID
     resume_id: UUID
     job_description_id: UUID
-    score: ScoreBreakdownOut
-    keyword_analysis: KeywordAnalysisOut
-    ai_engine_output: LLMAnalysisResult | None
-    ai_provider: str | None
-    ai_model: str | None
-    recommendations: list[RecommendationOut]
+    # "pending" | "processing" | "complete" | "failed" - see
+    # app.models.AnalysisStatus. The fields below are only populated once
+    # status == "complete"; error_message only when status == "failed".
+    status: str
+    error_message: str | None = None
+    score: ScoreBreakdownOut | None = None
+    keyword_analysis: KeywordAnalysisOut | None = None
+    ai_engine_output: LLMAnalysisResult | None = None
+    ai_provider: str | None = None
+    ai_model: str | None = None
+    recommendations: list[RecommendationOut] = []
     created_at: datetime
 
 
@@ -103,5 +108,6 @@ class AnalysisListItemOut(BaseModel):
     name: str | None
     email: str | None
     resume_file_name: str
-    overall_score: int
+    status: str
+    overall_score: int | None
     created_at: datetime

@@ -9,6 +9,13 @@ reachable and falls back to its own local engine otherwise - see
 [../README.md](../README.md) for the full picture. This backend has no
 knowledge of the frontend; it's a standalone API consumable by anything.
 
+**Checks are processed asynchronously by [`worker/`](../worker/README.md),
+not inline in this API.** `POST /api/v1/analyze` creates a `status="pending"`
+row and returns immediately (202) - it does not itself run Engine 1/Engine
+2/Scoring below. The worker process polls for pending rows and actually runs
+them; this API only creates/reads rows. Poll `GET /api/v1/analyses/{id}`
+until `status` is `complete` or `failed`.
+
 ```
                  Resume
                     |
@@ -62,9 +69,11 @@ Three interchangeable providers behind one `LLMProvider` interface
 | `openai` | `gpt-4o-mini` | `OPENAI_API_KEY` |
 | `anthropic` | `claude-opus-5` | `ANTHROPIC_API_KEY` |
 
-Switch via the `AI_PROVIDER` env var. **If the configured provider is
+Switch via the `AI_PROVIDER` env var (read by both this API and `worker/` -
+they share the same `Settings` class). **If the configured provider is
 unavailable or fails, analysis falls back to Engine 1 alone rather than
-failing the request** - see `app/services/analysis_pipeline.py`.
+failing the job** - see `app/services/analysis_pipeline.py`, invoked by the
+worker, not by this API.
 
 ## Scoring engine (`app/services/scoring_service.py`)
 
@@ -94,6 +103,11 @@ Every `user_id` column stays nullable, so anonymous use still works (e.g.
 when the frontend's local fallback engine runs instead of this backend).
 ChromaDB/vector storage is intentionally not used for this first version.
 
+`analysis_results.status` (`pending` / `processing` / `complete` / `failed`)
+is what makes the async handoff to `worker/` possible - see
+`app/services/job_queue.py`'s `SELECT ... FOR UPDATE SKIP LOCKED` claim
+logic, which is what lets multiple worker instances poll safely at once.
+
 ## API
 
 | Method | Path | Purpose |
@@ -103,13 +117,14 @@ ChromaDB/vector storage is intentionally not used for this first version.
 | `GET` | `/api/v1/resumes/{id}` | Fetch a stored resume |
 | `POST` | `/api/v1/job-descriptions` | Submit JD text, persist extracted requirements (optional `user_id`) |
 | `GET` | `/api/v1/job-descriptions/{id}` | Fetch a stored job description |
-| `POST` | `/api/v1/analyze` | Run both engines against a resume + JD, persist + return the full result |
-| `GET` | `/api/v1/analyses/{id}` | Fetch a stored analysis result + recommendations |
+| `POST` | `/api/v1/analyze` | Queue a check: creates a `status="pending"` row, returns 202 immediately - **does not run the pipeline itself**, see `worker/` |
+| `GET` | `/api/v1/analyses/{id}` | Fetch a check's current status/result - poll this until `status` is `complete`/`failed` |
+| `GET` | `/api/v1/analyses` | Read-only listing, one row per check (not per user), most recent first |
 | `GET` | `/api/v1/health` | DB connectivity + active AI provider |
 
 Interactive docs at `/docs` once the server is running.
 
-## Not yet built (see the phased plan)
+## Not yet built
 
 - PDF-coordinate-based inline highlighting (Engine 1 already captures
   table/image/column positions via PyMuPDF's word/block coordinates in
@@ -118,8 +133,10 @@ Interactive docs at `/docs` once the server is running.
   side from this backend's `keyword_analysis` rather than from these real
   positions)
 - Authentication
-- Production deployment (containerized here via `Dockerfile`/`docker-compose.yml`,
-  but not deployed)
+- Production deployment (containerized here via `Dockerfile` +
+  the root [`docker-compose.yml`](../docker-compose.yml), but not deployed)
+- Crash recovery for a job stuck in `processing` - see
+  [worker/README.md](../worker/README.md)'s known limitation
 
 ## Setup
 
@@ -138,13 +155,14 @@ alembic upgrade head
 uvicorn app.main:app --reload --port 8000
 ```
 
-Or via Docker (Postgres + API; point `OLLAMA_BASE_URL` at your host's
-Ollama if you want Engine 2 active):
+This API alone can create resumes/JDs and queue checks, but nothing will
+ever leave `status="pending"` without also running
+[`worker/`](../worker/README.md) - see its README for how to start it (it
+reuses this venv).
 
-```bash
-cp .env.example .env
-docker compose up --build
-```
+For Docker, see the root [`docker-compose.yml`](../docker-compose.yml) -
+`docker compose up` from the repo root brings up Postgres, this API, and the
+worker together.
 
 ## Tests
 

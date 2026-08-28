@@ -19,7 +19,8 @@ export interface BackendAnalysisListItem {
   name: string | null;
   email: string | null;
   resume_file_name: string;
-  overall_score: number;
+  status: string;
+  overall_score: number | null;
   created_at: string;
 }
 
@@ -116,17 +117,36 @@ export interface BackendRecommendation {
   after_text: string | null;
 }
 
+/** Backend now processes checks asynchronously (see worker/) - POST
+ * /api/v1/analyze returns this immediately with status "pending"; poll GET
+ * /api/v1/analyses/{id} until status is "complete" (score/keyword_analysis
+ * populated) or "failed" (error_message populated). See
+ * lib/api/backend-client.ts::runBackendAnalysis, which does that polling
+ * and only ever resolves once status is "complete". */
+export type BackendAnalysisStatus = "pending" | "processing" | "complete" | "failed";
+
 export interface BackendAnalysisResult {
   id: string;
   resume_id: string;
   job_description_id: string;
-  score: BackendScoreBreakdown;
-  keyword_analysis: BackendKeywordAnalysis;
+  status: BackendAnalysisStatus;
+  error_message: string | null;
+  score: BackendScoreBreakdown | null;
+  keyword_analysis: BackendKeywordAnalysis | null;
   ai_engine_output: BackendLLMAnalysisResult | null;
   ai_provider: string | null;
   ai_model: string | null;
   recommendations: BackendRecommendation[];
   created_at: string;
+}
+
+/** The narrowed shape returned by a successful runBackendAnalysis() poll -
+ * status is always "complete" and the score/keyword fields are guaranteed
+ * non-null, so callers don't need to re-check them. */
+export interface CompletedBackendAnalysisResult extends BackendAnalysisResult {
+  status: "complete";
+  score: BackendScoreBreakdown;
+  keyword_analysis: BackendKeywordAnalysis;
 }
 
 export interface BackendErrorBody {

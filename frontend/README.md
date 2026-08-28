@@ -29,20 +29,28 @@ newline-delimited JSON progress events followed by a final result, so the UI
 shows real progress instead of a fake timer. What actually produces that
 result depends on whether the backend is reachable:
 
-1. **Backend path (default when `backend/` is running).** The route calls a
-   fast health check (`lib/api/backend-client.ts::isBackendReachable`, ~2.5s
+1. **Backend path (default when `backend/` - and its
+   [`worker/`](../worker/README.md) - are running).** The route calls a fast
+   health check (`lib/api/backend-client.ts::isBackendReachable`, ~2.5s
    timeout) *before* streaming anything - if the backend answers, the route
    proxies to it: `POST /api/v1/users` (get-or-create by the name + email
    collected in step 1 of the form, best-effort - failure here degrades to
    an anonymous save rather than failing the analysis) -> `POST
    /api/v1/resumes` -> `POST /api/v1/job-descriptions` -> `POST
-   /api/v1/analyze` (`lib/analysis/backend-pipeline.ts`). The
-   backend's response (PyMuPDF-based rule engine + Ollama/OpenAI/Claude
-   semantic engine, Postgres-persisted) is adapted into this app's
-   `AnalysisResult` shape by `lib/analysis/backend-adapter.ts`. The backend
-   has no resume-text-position API, so inline highlighting is rebuilt here
-   from the extracted resume text plus the backend's real keyword analysis,
-   reusing the local engine's own highlighting logic for that one purpose.
+   /api/v1/analyze` (`lib/analysis/backend-pipeline.ts`). That last call
+   only *queues* the check - the backend processes it asynchronously (see
+   `worker/`), so `runBackendAnalysis` (`lib/api/backend-client.ts`) polls
+   `GET /api/v1/analyses/{id}` every 1.5s (up to 2 minutes) until the
+   worker settles it to `status: "complete"` or `"failed"`. The completed
+   result (PyMuPDF-based rule engine + Ollama/OpenAI/Claude semantic engine,
+   Postgres-persisted) is adapted into this app's `AnalysisResult` shape by
+   `lib/analysis/backend-adapter.ts`. The backend has no resume-text-position
+   API, so inline highlighting is rebuilt here from the extracted resume text
+   plus the backend's real keyword analysis, reusing the local engine's own
+   highlighting logic for that one purpose. If the backend is reachable but
+   its worker isn't running, a check will queue and then time out after 2
+   minutes stuck at `pending`/`processing` - the health check only confirms
+   the API is up, not that a worker is consuming its queue.
 2. **Local fallback path (when the backend is unreachable).** The route runs
    this app's own self-contained TypeScript pipeline (`lib/analysis/`)
    instead - full PDF/DOCX/TXT extraction, rule-based keyword matching

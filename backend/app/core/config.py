@@ -29,6 +29,9 @@ class Settings(BaseSettings):
     # CORS
     cors_origins: list[str] = ["http://localhost:3000"]
 
+    # worker/ - how often it polls for pending analysis jobs when idle
+    worker_poll_interval_seconds: float = 3.0
+
 
 @lru_cache
 def get_settings() -> Settings:

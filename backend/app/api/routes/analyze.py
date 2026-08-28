@@ -4,30 +4,33 @@ from fastapi import APIRouter, HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
-from app.api.deps import AppSettings, DbSession
-from app.models import AnalysisResult, JobDescription, Recommendation, Resume
-from app.models.recommendation import RecommendationPriority, RecommendationSource
+from app.api.deps import DbSession
+from app.models import AnalysisResult, JobDescription, Resume
 from app.schemas.analysis import (
     AnalysisListItemOut,
     AnalysisResultOut,
     AnalyzeRequest,
     RecommendationOut,
 )
-from app.schemas.parsing import LayoutFindings
-from app.services.analysis_pipeline import run_analysis
 
 router = APIRouter(prefix="/api/v1", tags=["analysis"])
 
 
 def _to_result_out(result: AnalysisResult) -> AnalysisResultOut:
+    score = None
+    if result.overall_score is not None and result.category_scores is not None:
+        score = {
+            "overall": result.overall_score,
+            "categories": result.category_scores["categories"],
+        }
+
     return AnalysisResultOut(
         id=result.id,
         resume_id=result.resume_id,
         job_description_id=result.job_description_id,
-        score={
-            "overall": result.overall_score,
-            "categories": result.category_scores["categories"],
-        },
+        status=result.status.value,
+        error_message=result.error_message,
+        score=score,
         keyword_analysis=result.keyword_analysis,
         ai_engine_output=result.ai_engine_output,
         ai_provider=result.ai_provider,
@@ -49,8 +52,15 @@ def _to_result_out(result: AnalysisResult) -> AnalysisResultOut:
     )
 
 
-@router.post("/analyze", response_model=AnalysisResultOut, status_code=201)
-async def analyze(body: AnalyzeRequest, db: DbSession, settings: AppSettings) -> AnalysisResultOut:
+@router.post("/analyze", response_model=AnalysisResultOut, status_code=202)
+async def analyze(body: AnalyzeRequest, db: DbSession) -> AnalysisResultOut:
+    """
+    Queues a check rather than running it inline: creates a "pending"
+    AnalysisResult row and returns immediately (202). worker/ polls for
+    pending rows, runs the actual rule engine + AI engine pipeline, and
+    writes the result - poll GET /api/v1/analyses/{id} until status is
+    "complete" (or "failed").
+    """
     resume = await db.get(Resume, body.resume_id)
     if resume is None:
         raise HTTPException(status_code=404, detail="Resume not found.")
@@ -59,45 +69,28 @@ async def analyze(body: AnalyzeRequest, db: DbSession, settings: AppSettings) ->
     if job_description is None:
         raise HTTPException(status_code=404, detail="Job description not found.")
 
-    layout = LayoutFindings.model_validate(resume.extracted_data.get("layout", {}))
-
-    pipeline_result = await run_analysis(
-        resume_text=resume.raw_text,
-        file_kind=resume.file_kind.value,
-        layout=layout,
-        jd_text=job_description.raw_text,
-        settings=settings,
-    )
-
     analysis_result = AnalysisResult(
         user_id=resume.user_id,
         resume_id=resume.id,
         job_description_id=job_description.id,
-        overall_score=pipeline_result.score.overall,
-        category_scores={"categories": [c.model_dump() for c in pipeline_result.score.categories]},
-        keyword_analysis=pipeline_result.keyword_analysis.model_dump(),
-        ai_engine_output=pipeline_result.ai_result.model_dump() if pipeline_result.ai_result else None,
-        ai_provider=pipeline_result.ai_provider,
-        ai_model=pipeline_result.ai_model,
     )
-    analysis_result.recommendations = [
-        Recommendation(
-            category=draft.category,
-            priority=RecommendationPriority(draft.priority),
-            source=RecommendationSource(draft.source),
-            title=draft.title,
-            description=draft.description,
-            before_text=draft.before_text,
-            after_text=draft.after_text,
-        )
-        for draft in pipeline_result.recommendations
-    ]
-
     db.add(analysis_result)
     await db.commit()
-    await db.refresh(analysis_result, attribute_names=["recommendations"])
+    await db.refresh(analysis_result)
 
-    return _to_result_out(analysis_result)
+    # Deliberately not using _to_result_out here: even *assigning* [] to
+    # analysis_result.recommendations would make SQLAlchemy diff against the
+    # current collection first, which means lazy-loading it - unsupported
+    # under asyncpg outside an explicit query. A freshly created row has no
+    # recommendations yet regardless, so this is built directly instead of
+    # touching that relationship at all.
+    return AnalysisResultOut(
+        id=analysis_result.id,
+        resume_id=analysis_result.resume_id,
+        job_description_id=analysis_result.job_description_id,
+        status=analysis_result.status.value,
+        created_at=analysis_result.created_at,
+    )
 
 
 @router.get("/analyses", response_model=list[AnalysisListItemOut])
@@ -119,6 +112,7 @@ async def list_analyses(db: DbSession, limit: int = 500) -> list[AnalysisListIte
             name=r.user.name if r.user else None,
             email=r.user.email if r.user else None,
             resume_file_name=r.resume.file_name,
+            status=r.status.value,
             overall_score=r.overall_score,
             created_at=r.created_at,
         )

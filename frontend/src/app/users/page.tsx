@@ -96,12 +96,18 @@ export default async function UsersPage() {
                           {check.resume_file_name}
                         </td>
                         <td className="px-6 py-3">
-                          <span
-                            className="font-semibold tabular-nums"
-                            style={{ color: SCORE_BAND_COLORS[scoreBand(check.overall_score)] }}
-                          >
-                            {check.overall_score}
-                          </span>
+                          {check.overall_score !== null ? (
+                            <span
+                              className="font-semibold tabular-nums"
+                              style={{ color: SCORE_BAND_COLORS[scoreBand(check.overall_score)] }}
+                            >
+                              {check.overall_score}
+                            </span>
+                          ) : (
+                            <span className="text-xs text-slate-400 capitalize dark:text-slate-600">
+                              {check.status}
+                            </span>
+                          )}
                         </td>
                         <td className="px-6 py-3 whitespace-nowrap text-slate-500 dark:text-slate-400">
                           {dateFormatter.format(new Date(check.created_at))}

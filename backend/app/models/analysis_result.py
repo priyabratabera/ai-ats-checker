@@ -1,11 +1,19 @@
+import enum
 import uuid
 
-from sqlalchemy import ForeignKey, Integer, String
+from sqlalchemy import Enum, ForeignKey, Integer, String, Text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
+
+
+class AnalysisStatus(str, enum.Enum):
+    pending = "pending"
+    processing = "processing"
+    complete = "complete"
+    failed = "failed"
 
 
 class AnalysisResult(UUIDPrimaryKeyMixin, TimestampMixin, Base):
@@ -23,13 +31,22 @@ class AnalysisResult(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         nullable=False,
     )
 
-    overall_score: Mapped[int] = mapped_column(Integer, nullable=False)
+    # POST /api/v1/analyze creates the row as "pending" and returns
+    # immediately (202) - the worker/ process claims it, sets "processing",
+    # runs the pipeline, and writes "complete"/"failed". See worker/main.py.
+    status: Mapped[AnalysisStatus] = mapped_column(
+        Enum(AnalysisStatus, name="analysis_status"),
+        nullable=False,
+        default=AnalysisStatus.pending,
+    )
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
 
-    # {"keyword_match": {"score": 88, "weight": 0.25, ...}, "skills_match": {...}, ...}
-    category_scores: Mapped[dict] = mapped_column(JSONB, nullable=False)
-
+    # All three are null until the worker finishes (status="complete").
+    overall_score: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # {"categories": [{"key": "keyword_match", "score": 88, "weight": 0.25, ...}, ...]}
+    category_scores: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     # {"matched": [...], "missing": [...], "partial": [...]}
-    keyword_analysis: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    keyword_analysis: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
 
     # Raw structured output from the AI engine: job_match_score,
     # matched_skills, missing_skills, partial_matches, summary. Null if the

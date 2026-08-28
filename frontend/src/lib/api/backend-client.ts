@@ -5,6 +5,7 @@ import type {
   BackendJobDescription,
   BackendResume,
   BackendUser,
+  CompletedBackendAnalysisResult,
 } from "@/types/backend";
 
 export class BackendUnavailableError extends Error {
@@ -140,23 +141,66 @@ export async function createJobDescriptionOnBackend(
   return (await response.json()) as BackendJobDescription;
 }
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function getAnalysisFromBackend(analysisId: string): Promise<BackendAnalysisResult> {
+  const response = await backendFetch(`/api/v1/analyses/${analysisId}`, { method: "GET" }, 10_000);
+  if (!response.ok) {
+    throw new BackendRequestError(await parseErrorDetail(response), response.status);
+  }
+  return (await response.json()) as BackendAnalysisResult;
+}
+
+const POLL_INTERVAL_MS = 1_500;
+const POLL_TIMEOUT_MS = 120_000;
+
+/**
+ * The backend processes checks asynchronously (see worker/): POST
+ * /api/v1/analyze just creates a "pending" row and returns immediately, so
+ * this polls GET /api/v1/analyses/{id} until the worker settles it. The AI
+ * engine call it's waiting on can genuinely take 10-20s+, hence the
+ * generous overall timeout - a real job taking that long is expected, not
+ * an error.
+ */
 export async function runBackendAnalysis(
   resumeId: string,
   jobDescriptionId: string,
-): Promise<BackendAnalysisResult> {
-  // The AI engine call (Ollama/OpenAI/Claude) can genuinely take 10-20s+ -
-  // give it real room rather than racing the upload/JD timeouts above.
-  const response = await backendFetch(
+): Promise<CompletedBackendAnalysisResult> {
+  const created = await backendFetch(
     "/api/v1/analyze",
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ resume_id: resumeId, job_description_id: jobDescriptionId }),
     },
-    60_000,
+    10_000,
   );
-  if (!response.ok) {
-    throw new BackendRequestError(await parseErrorDetail(response), response.status);
+  if (!created.ok) {
+    throw new BackendRequestError(await parseErrorDetail(created), created.status);
   }
-  return (await response.json()) as BackendAnalysisResult;
+  const { id: analysisId } = (await created.json()) as BackendAnalysisResult;
+
+  const deadline = Date.now() + POLL_TIMEOUT_MS;
+  while (Date.now() < deadline) {
+    await sleep(POLL_INTERVAL_MS);
+    const current = await getAnalysisFromBackend(analysisId);
+
+    if (current.status === "complete" && current.score && current.keyword_analysis) {
+      return current as CompletedBackendAnalysisResult;
+    }
+    if (current.status === "failed") {
+      throw new BackendRequestError(
+        current.error_message ?? "Analysis failed on the backend.",
+        500,
+      );
+    }
+    // "pending" / "processing" - keep polling.
+  }
+
+  throw new BackendRequestError(
+    "Timed out waiting for the backend worker to finish this analysis.",
+    504,
+  );
 }
