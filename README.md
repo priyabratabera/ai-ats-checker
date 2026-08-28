@@ -6,20 +6,25 @@ prioritized, actionable recommendations - powered by a deterministic rule
 engine plus a pluggable AI semantic engine (Ollama by default, OpenAI/Claude
 optional).
 
-```
-Browser
-  │
-  ▼
-frontend/ (Next.js)  --  POST /api/analyze
-  │
-  ├─ backend reachable? ── yes ──▶ backend/ (FastAPI)  --  POST /api/v1/analyze
-  │                                   │
-  │                                   ├─ Rule Engine (PyMuPDF, deterministic)
-  │                                   ├─ AI Engine (Ollama / OpenAI / Claude)
-  │                                   ▼
-  │                              Scoring Engine ──▶ PostgreSQL
-  │
-  └─ no ──▶ local TS fallback engine (same UI, no persistence, no PyMuPDF checks)
+```mermaid
+flowchart TD
+    Browser(["Browser"]) --> FE["frontend/ (Next.js)<br/>POST /api/analyze"]
+    FE --> Check{"Backend<br/>reachable?"}
+
+    Check -- "no" --> Local["Local TS fallback engine<br/>(same UI, no persistence,<br/>no PyMuPDF layout checks)"]
+    Local -.result.-> FE
+
+    Check -- "yes" --> BE
+
+    subgraph Backend["backend/ (FastAPI)"]
+        BE["POST /api/v1/analyze"] --> Rule["Rule Engine<br/>(PyMuPDF, deterministic)"]
+        BE --> AI["AI Engine<br/>(Ollama / OpenAI / Claude)"]
+        Rule --> Score["Scoring Engine"]
+        AI --> Score
+    end
+
+    Score --> DB[("PostgreSQL")]
+    Score -.result.-> FE
 ```
 
 ## Two pieces, one product
