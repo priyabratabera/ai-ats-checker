@@ -30,3 +30,11 @@ async def identify_user(body: IdentifyUserRequest, db: DbSession) -> User:
     await db.commit()
     await db.refresh(user)
     return user
+
+
+@router.get("", response_model=list[UserOut])
+async def list_users(db: DbSession, limit: int = 500) -> list[User]:
+    """Read-only listing (name, email, created_at) for every identified
+    visitor, most recent first. No filtering/editing - just a list."""
+    result = await db.scalars(select(User).order_by(User.created_at.desc()).limit(limit))
+    return list(result.all())
