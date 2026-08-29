@@ -88,9 +88,10 @@ cp .env.example .env.local
 npm run dev
 ```
 
-Or via Docker - `docker compose up` brings up Postgres, the API, and the
-worker together (copy `backend/.env.example` -> `backend/.env` and
-`worker/.env.example` -> `worker/.env` first).
+Or via Docker - `docker compose up` brings up Postgres, the API, the worker,
+and the frontend together (copy `backend/.env.example` -> `backend/.env`,
+`worker/.env.example` -> `worker/.env`, and `frontend/.env.example` ->
+`frontend/.env.local` first).
 
 Open [http://localhost:3000](http://localhost:3000). Skip the backend/worker
 steps entirely and the frontend still works, using its local fallback engine

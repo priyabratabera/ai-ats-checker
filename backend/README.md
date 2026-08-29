@@ -161,8 +161,8 @@ ever leave `status="pending"` without also running
 reuses this venv).
 
 For Docker, see the root [`docker-compose.yml`](../docker-compose.yml) -
-`docker compose up` from the repo root brings up Postgres, this API, and the
-worker together.
+`docker compose up` from the repo root brings up Postgres, this API, the
+worker, and the frontend together.
 
 ## Tests
 

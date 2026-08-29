@@ -67,7 +67,7 @@ here - the same trick the Dockerfile achieves by copying instead.
 ## Running via Docker
 
 See the root [`docker-compose.yml`](../docker-compose.yml) - `docker compose up`
-brings up Postgres, the API, and this worker together.
+brings up Postgres, the API, this worker, and the frontend together.
 
 ## Environment variables
 

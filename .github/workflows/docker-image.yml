@@ -21,6 +21,10 @@ jobs:
           - image: worker
             context: .
             dockerfile: worker/Dockerfile
+          # frontend/Dockerfile's build context is frontend/ itself.
+          - image: web
+            context: ./frontend
+            dockerfile: frontend/Dockerfile
 
     steps:
       - uses: actions/checkout@v4

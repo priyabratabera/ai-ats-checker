@@ -78,6 +78,13 @@ Open [http://localhost:3000](http://localhost:3000). Start the
 (Postgres persistence, PyMuPDF layout checks, live LLM semantic analysis) -
 otherwise every request automatically uses the local fallback engine.
 
+For Docker, `Dockerfile` here is a multi-stage build using Next.js's
+`output: "standalone"` (see `next.config.ts`) - it builds with the full
+`node_modules`, then ships only the traced runtime files (no dev
+dependencies) in the final image, run via `node server.js`. See the root
+[`docker-compose.yml`](../docker-compose.yml) - `docker compose up` brings
+this up alongside the backend and worker.
+
 ## Environment variables
 
 Copy `.env.example` to `.env.local`. Every variable is optional - the app is

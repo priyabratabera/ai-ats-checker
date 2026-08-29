@@ -50,5 +50,20 @@ services:
       DATABASE_URL: postgresql+asyncpg://ats_checker:ats_checker@postgres:5432/ats_checker
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
 
+  web:
+    build:
+      context: ./frontend
+    restart: unless-stopped
+    depends_on:
+      - api
+    env_file:
+      - ./frontend/.env.local
+    environment:
+      # Overrides frontend/.env.local to reach the api container by its
+      # compose service name instead of localhost.
+      BACKEND_API_URL: http://api:8000
+    ports:
+      - "3000:3000"
+
 volumes:
   postgres_data:
